@@ -93,22 +93,30 @@ async function uploadFileToDrive(fileBuffer, fileName, mimeType, folderId) {
     const { Readable } = require('stream');
     const readableStream = Readable.from(fileBuffer);
 
+    console.log(`📁 Uploading "${fileName}" to folder: ${folderId || '(root - no folder set!)'}`);
+
+    if (!folderId) {
+        throw new Error('No Drive folder ID provided. Set DRIVE_MAIN_FOLDER_ID env var on Render.');
+    }
+
     const res = await driveClient.files.create({
         requestBody: {
             name: fileName,
-            parents: folderId ? [folderId] : [],
+            parents: [folderId],
         },
         media: {
             mimeType,
             body: readableStream,
         },
         fields: 'id, name, webViewLink, createdTime',
+        supportsAllDrives: true,
     });
 
     // Make file readable by anyone with the link
     await driveClient.permissions.create({
         fileId: res.data.id,
         requestBody: { role: 'reader', type: 'anyone' },
+        supportsAllDrives: true,
     });
 
     return res.data;
