@@ -67,31 +67,20 @@ router.post('/', verifyToken, requireAdmin, async (req, res) => {
         `).run(gradeValue, gradedAt, driveFileId);
     }
 
-    // Copy to High Achievers folder if score ≥ threshold
-    let copiedToHighAchievers = false;
-    if (gradeValue >= HIGH_SCORE && subject && subject.high_folder_id && driveFileId) {
-        try {
-            await copyDriveFile(driveFileId, subject.high_folder_id);
-            copiedToHighAchievers = true;
-        } catch (copyErr) {
-            console.warn('⚠️  High Achievers copy failed:', copyErr.message);
-        }
-    }
+    // Copying to High Achievers folder is handled by the frontend via Apps Script
 
     // Sync to Google Sheets (non-blocking)
-    if (subject) {
-        appendGradeToSheets({
-            sheetId: subject.sheet_id || process.env.SHEETS_ID,
-            tabName: process.env.SHEETS_TAB_GRADES || 'Grades',
-            studentId,
-            firstName: firstName || '',
-            lastName: lastName || '',
-            imageFile: imageFile || '',
-            mark: gradeValue,
-            subject: resolvedSubjectName || '',
-            gradedAt: new Date().toLocaleString()
-        }).catch(err => console.warn('Sheets sync failed:', err.message));
-    }
+    const targetSheetId = (subject && subject.sheet_id) ? subject.sheet_id : process.env.SHEETS_ID;
+    appendGradeToSheets({
+        sheetId: targetSheetId,
+        tabName: process.env.SHEETS_TAB_GRADES || 'Grades',
+        studentId,
+        firstName: firstName || '',
+        lastName: lastName || '',
+        imageFile: imageFile || '',
+        mark: gradeValue,
+        gradedAt: new Date().toLocaleString()
+    }).catch(err => console.warn('Sheets sync failed:', err.message));
 
     const grade = db.prepare('SELECT * FROM grades WHERE id = ?').get(result.lastInsertRowid);
     res.status(201).json({

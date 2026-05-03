@@ -157,11 +157,11 @@ async function deleteDriveFile(fileId) {
 }
 
 /* ── Append a grade row to Google Sheets ────────────────── */
-async function appendGradeToSheets({ sheetId, tabName, studentId, firstName, lastName, imageFile, mark, subject, gradedAt }) {
+async function appendGradeToSheets({ sheetId, tabName, studentId, firstName, lastName, imageFile, mark, gradedAt }) {
     if (!sheetsClient) return { success: true, simulated: true };
 
     const values = [[
-        studentId, firstName, lastName, imageFile, mark, gradedAt || new Date().toLocaleString(), subject
+        studentId, firstName, lastName, imageFile, mark, gradedAt || new Date().toLocaleString()
     ]];
 
     await sheetsClient.spreadsheets.values.append({
