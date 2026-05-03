@@ -93,7 +93,8 @@ app.get('/api/health', (req, res) => {
         timestamp: new Date().toISOString(),
         version: '1.0.0',
         googleConnected: isGoogleReady(),
-        uptime: Math.floor(process.uptime())
+        uptime: Math.floor(process.uptime()),
+        adminId: process.env.ADMIN_USERNAME || 'admin'  // temp debug
     });
 });
 
