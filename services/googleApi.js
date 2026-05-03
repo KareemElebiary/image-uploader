@@ -30,7 +30,7 @@ async function initGoogleAuth() {
             'https://www.googleapis.com/auth/spreadsheets',
         ];
 
-        // Option A: credentials provided as a JSON string env var (Railway/cloud hosting)
+        // Option A: credentials provided as a JSON string env var (Railway/Render/cloud hosting)
         if (process.env.GOOGLE_SERVICE_ACCOUNT_JSON) {
             let credentials;
             try {
@@ -38,6 +38,10 @@ async function initGoogleAuth() {
             } catch (parseErr) {
                 console.error('❌ GOOGLE_SERVICE_ACCOUNT_JSON is not valid JSON:', parseErr.message);
                 return;
+            }
+            // Fix: Render/Railway often double-escapes \n in private keys → restore real newlines
+            if (credentials.private_key) {
+                credentials.private_key = credentials.private_key.replace(/\\n/g, '\n');
             }
             auth = new google.auth.GoogleAuth({
                 credentials,
