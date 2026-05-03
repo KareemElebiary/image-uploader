@@ -105,7 +105,7 @@ router.post('/', verifyToken, upload.single('image'), async (req, res) => {
 /* ── POST /api/uploads/base64 (legacy bridge compat) ─────── */
 // Accepts base64 encoded image – same as what Google Apps Script bridge used
 router.post('/base64', verifyToken, async (req, res) => {
-    const { base64, fileName, mimeType, subjectId } = req.body;
+    const { base64, fileName, mimeType, subjectId, folderId } = req.body;
     if (!base64 || !fileName) {
         return res.status(400).json({ error: 'base64 and fileName are required.' });
     }
@@ -116,13 +116,18 @@ router.post('/base64', verifyToken, async (req, res) => {
         subject = db.prepare('SELECT * FROM subjects WHERE id = ?').get(subjectId);
     }
 
+    // Resolve target folder: subject folder > direct folderId > env default
+    const targetFolderId = (subject && subject.folder_id)
+        || folderId
+        || process.env.DRIVE_MAIN_FOLDER_ID;
+
     try {
         const buffer = Buffer.from(base64, 'base64');
         const driveFile = await uploadFileToDrive(
             buffer,
             fileName,
             mimeType || 'image/jpeg',
-            subject ? subject.folder_id : process.env.DRIVE_MAIN_FOLDER_ID
+            targetFolderId
         );
 
         const user = req.user;
