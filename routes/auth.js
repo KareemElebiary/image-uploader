@@ -112,6 +112,21 @@ router.post('/register', (req, res) => {
         email ? String(email).trim() : null
     );
 
+    // ── Persist to Google Sheets so user survives redeploys ──
+    if (process.env.APPS_SCRIPT_URL) {
+        fetch(process.env.APPS_SCRIPT_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain' },
+            body: JSON.stringify({
+                action: 'registerUser',
+                data: {
+                    sheetId: process.env.SHEETS_ID,
+                    values: [String(id).trim(), hashed, 'student', String(firstName).trim(), String(lastName).trim()]
+                }
+            })
+        }).catch(e => console.warn('⚠️  Failed to sync user to Sheets:', e.message));
+    }
+
     const token = jwt.sign(
         { id, role: 'student', firstName, lastName },
         JWT_SECRET,
@@ -123,6 +138,38 @@ router.post('/register', (req, res) => {
         user: { id, role: 'student', firstName, lastName, email }
     });
 });
+
+/* ── Sync users from Google Sheets into SQLite (run on startup) ── */
+async function syncUsersFromSheets() {
+    const url = process.env.APPS_SCRIPT_URL;
+    const sheetId = process.env.SHEETS_ID;
+    if (!url || !sheetId) return;
+
+    try {
+        const response = await fetch(
+            `${url}?action=getUsers&data=${encodeURIComponent(JSON.stringify({ sheetId }))}`
+        );
+        const rows = await response.json();
+        if (!Array.isArray(rows) || rows.length < 2) return;
+
+        const db = getDb();
+        const insert = db.prepare(`
+            INSERT OR IGNORE INTO users (id, password, role, first_name, last_name)
+            VALUES (?, ?, ?, ?, ?)
+        `);
+
+        let count = 0;
+        for (const row of rows.slice(1)) { // skip header row
+            if (row[0] && row[1] && row[2] === 'student') {
+                insert.run(row[0], row[1], row[2], row[3] || '', row[4] || '');
+                count++;
+            }
+        }
+        if (count > 0) console.log(`✅ Restored ${count} student(s) from Google Sheets`);
+    } catch (err) {
+        console.warn('⚠️  Could not sync users from Sheets:', err.message);
+    }
+}
 
 /* ── GET /api/auth/me ───────────────────────────────────── */
 router.get('/me', verifyToken, (req, res) => {
@@ -154,4 +201,4 @@ router.get('/users', verifyToken, requireAdmin, (req, res) => {
     })));
 });
 
-module.exports = { router, verifyToken, requireAdmin };
+module.exports = { router, verifyToken, requireAdmin, syncUsersFromSheets };

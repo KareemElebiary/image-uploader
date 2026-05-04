@@ -23,6 +23,7 @@ const { initializeDatabase } = require('./db/database');
 const { initGoogleAuth, isGoogleReady } = require('./services/googleApi');
 
 const authRoutes = require('./routes/auth');
+const { syncUsersFromSheets } = require('./routes/auth');
 const subjectRoutes = require('./routes/subjects');
 const uploadRoutes = require('./routes/uploads');
 const gradeRoutes = require('./routes/grades');
@@ -265,10 +266,11 @@ async function start() {
             console.log('🔗 Google Drive & Sheets connected');
         } else {
             console.log('⚠️  Google APIs not configured – running in simulation mode');
-            console.log('   To enable on Railway: set the GOOGLE_SERVICE_ACCOUNT_JSON env var.');
-            console.log('   To enable locally: add google-service-account.json to the backend folder.');
         }
     });
+
+    // Restore students from Google Sheets (free persistence across redeploys)
+    syncUsersFromSheets().catch(e => console.warn('User sync skipped:', e.message));
 
     app.listen(PORT, () => {
         console.log(`\n🚀 Server running at: http://localhost:${PORT}`);
