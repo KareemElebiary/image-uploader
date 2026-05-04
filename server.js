@@ -30,6 +30,9 @@ const gradeRoutes = require('./routes/grades');
 const driveRoutes = require('./routes/drive');
 
 const app = express();
+// Trust Render's proxy to get the correct client IP for rate limiting
+app.set('trust proxy', 1);
+
 const PORT = process.env.PORT || 3001;
 
 /* ── Security Middleware ────────────────────────────────── */

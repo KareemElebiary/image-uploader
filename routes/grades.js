@@ -84,8 +84,7 @@ router.post('/', verifyToken, requireAdmin, async (req, res) => {
 
     const grade = db.prepare('SELECT * FROM grades WHERE id = ?').get(result.lastInsertRowid);
     res.status(201).json({
-        ...formatGrade(grade),
-        copiedToHighAchievers
+        ...formatGrade(grade)
     });
 });
 
