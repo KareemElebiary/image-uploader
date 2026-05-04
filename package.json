@@ -4,7 +4,7 @@
   "description": "EduVault backend server with SQLite database and Google Drive integration",
   "main": "server.js",
   "engines": {
-    "node": ">=18.0.0"
+    "node": "20.x"
   },
   "scripts": {
     "start": "node server.js",
