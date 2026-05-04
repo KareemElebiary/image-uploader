@@ -7,12 +7,9 @@ const Database = require('better-sqlite3');
 const path = require('path');
 const bcrypt = require('bcryptjs');
 
-// On Render: mount a Disk at /data → data persists across deploys
-// Locally: falls back to backend/data/eduvault.db
+// DB is recreated on each deploy, but users are restored from Google Sheets automatically
 const DB_PATH = process.env.DB_PATH ||
-    (process.env.NODE_ENV === 'production'
-        ? '/data/eduvault.db'
-        : path.join(__dirname, '..', 'data', 'eduvault.db'));
+    path.join(__dirname, '..', 'data', 'eduvault.db');
 
 let db;
 
