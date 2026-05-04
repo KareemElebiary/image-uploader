@@ -28,64 +28,69 @@ router.post('/', verifyToken, requireAdmin, async (req, res) => {
         return res.status(400).json({ error: 'Mark must be a number between 0 and 100.' });
     }
 
-    const db = getDb();
+    try {
+        const db = getDb();
 
-    // Look up subject if provided
-    let subject = null;
-    let resolvedSubjectId = subjectId;
-    let resolvedSubjectName = subjectName;
+        // Look up subject if provided
+        let subject = null;
+        let resolvedSubjectId = subjectId;
+        let resolvedSubjectName = subjectName;
 
-    if (subjectId) {
-        subject = db.prepare('SELECT * FROM subjects WHERE id = ?').get(subjectId);
-        if (subject) {
-            resolvedSubjectName = subject.name;
+        if (subjectId) {
+            subject = db.prepare('SELECT * FROM subjects WHERE id = ?').get(subjectId);
+            if (subject) {
+                resolvedSubjectName = subject.name;
+            }
         }
+
+        const gradedAt = new Date().toISOString();
+
+        // Insert grade record
+        const result = db.prepare(`
+            INSERT INTO grades (student_id, first_name, last_name, image_file, drive_file_id, mark, subject_id, subject_name, graded_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+            String(studentId).trim(),
+            firstName || null,
+            lastName || null,
+            imageFile || null,
+            driveFileId || null,
+            gradeValue,
+            resolvedSubjectId || null,
+            resolvedSubjectName || null,
+            gradedAt
+        );
+
+        // Update the uploads table too
+        if (driveFileId) {
+            db.prepare(`
+                UPDATE uploads SET grade = ?, graded_at = ? WHERE drive_file_id = ?
+            `).run(gradeValue, gradedAt, driveFileId);
+        }
+
+        // Copying to High Achievers folder is handled by the frontend via Apps Script
+
+        // Sync to Google Sheets (non-blocking)
+        const targetSheetId = (subject && subject.sheet_id) ? subject.sheet_id : process.env.SHEETS_ID;
+        appendGradeToSheets({
+            sheetId: targetSheetId,
+            tabName: process.env.SHEETS_TAB_GRADES || 'Grades',
+            studentId,
+            firstName: firstName || '',
+            lastName: lastName || '',
+            imageFile: imageFile || '',
+            mark: gradeValue,
+            gradedAt: new Date().toLocaleString()
+        }).catch(err => console.warn('Sheets sync failed:', err.message));
+
+        const grade = db.prepare('SELECT * FROM grades WHERE id = ?').get(result.lastInsertRowid);
+        res.status(201).json({
+            ...formatGrade(grade)
+        });
+    } catch (err) {
+        console.error('Failed to submit grade:', err);
+        res.status(500).json({ error: 'Failed to save grade to database' });
     }
-
-    const gradedAt = new Date().toISOString();
-
-    // Insert grade record
-    const result = db.prepare(`
-        INSERT INTO grades (student_id, first_name, last_name, image_file, drive_file_id, mark, subject_id, subject_name, graded_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-        String(studentId).trim(),
-        firstName || null,
-        lastName || null,
-        imageFile || null,
-        driveFileId || null,
-        gradeValue,
-        resolvedSubjectId || null,
-        resolvedSubjectName || null,
-        gradedAt
-    );
-
-    // Update the uploads table too
-    if (driveFileId) {
-        db.prepare(`
-            UPDATE uploads SET grade = ?, graded_at = ? WHERE drive_file_id = ?
-        `).run(gradeValue, gradedAt, driveFileId);
-    }
-
-    // Copying to High Achievers folder is handled by the frontend via Apps Script
-
-    // Sync to Google Sheets (non-blocking)
-    const targetSheetId = (subject && subject.sheet_id) ? subject.sheet_id : process.env.SHEETS_ID;
-    appendGradeToSheets({
-        sheetId: targetSheetId,
-        tabName: process.env.SHEETS_TAB_GRADES || 'Grades',
-        studentId,
-        firstName: firstName || '',
-        lastName: lastName || '',
-        imageFile: imageFile || '',
-        mark: gradeValue,
-        gradedAt: new Date().toLocaleString()
-    }).catch(err => console.warn('Sheets sync failed:', err.message));
-
-    const grade = db.prepare('SELECT * FROM grades WHERE id = ?').get(result.lastInsertRowid);
-    res.status(201).json({
-        ...formatGrade(grade)
-    });
 });
 
 /* ── GET /api/grades (admin) ────────────────────────────── */

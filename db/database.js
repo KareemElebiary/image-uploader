@@ -65,12 +65,11 @@ function initializeDatabase() {
             student_id      TEXT NOT NULL,
             first_name      TEXT,
             last_name       TEXT,
-            subject_id      INTEGER,
+            subject_id      TEXT,
             subject_name    TEXT,
             uploaded_at     TEXT NOT NULL DEFAULT (datetime('now')),
             grade           REAL,
-            graded_at       TEXT,
-            FOREIGN KEY(subject_id) REFERENCES subjects(id)
+            graded_at       TEXT
         );
     `);
 
@@ -84,11 +83,10 @@ function initializeDatabase() {
             image_file      TEXT,
             drive_file_id   TEXT,
             mark            REAL NOT NULL,
-            subject_id      INTEGER,
+            subject_id      TEXT,
             subject_name    TEXT,
             graded_at       TEXT NOT NULL DEFAULT (datetime('now')),
-            graded_by       TEXT DEFAULT 'admin',
-            FOREIGN KEY(subject_id) REFERENCES subjects(id)
+            graded_by       TEXT DEFAULT 'admin'
         );
     `);
 
