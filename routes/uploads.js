@@ -20,6 +20,19 @@ const {
 
 const router = express.Router();
 
+function buildStudentSlug(firstName, lastName, fallbackId) {
+    const sanitize = (s) => String(s || '')
+        .trim()
+        .replace(/[^a-zA-Z0-9]/g, '-')
+        .replace(/-+/g, '-')
+        .replace(/^-|-$/g, '');
+    const a = sanitize(firstName);
+    const b = sanitize(lastName);
+    if (a && b) return `${a}-${b}`;
+    const id = sanitize(fallbackId);
+    return a || id || 'Student';
+}
+
 /* ── Multer – in-memory storage (we stream to Drive) ─────── */
 const MAX_MB = parseInt(process.env.MAX_FILE_SIZE_MB || '10');
 const upload = multer({
@@ -53,7 +66,7 @@ router.post('/', verifyToken, upload.single('image'), async (req, res) => {
 
     const user = req.user;
     const ext = req.file.originalname.split('.').pop().toLowerCase();
-    const safeName = (user.firstName || user.id).replace(/[^a-zA-Z0-9]/g, '_');
+    const safeName = buildStudentSlug(user.firstName, user.lastName, user.id);
     const fileName = `${safeName}_${user.id}.${ext}`;
 
     try {
