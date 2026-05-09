@@ -45,14 +45,27 @@ router.post('/', verifyToken, requireAdmin, async (req, res) => {
 
         const gradedAt = new Date().toISOString();
 
+        // Fix missing last name by looking it up in the database
+        let realFirstName = firstName || '';
+        let realLastName = lastName || '';
+        try {
+            const studentRow = db.prepare('SELECT first_name, last_name FROM users WHERE id = ?').get(String(studentId).trim());
+            if (studentRow) {
+                realFirstName = studentRow.first_name || realFirstName;
+                realLastName = studentRow.last_name || realLastName;
+            }
+        } catch (e) {
+            console.warn('Could not lookup student real name:', e.message);
+        }
+
         // Insert grade record
         const result = db.prepare(`
             INSERT INTO grades (student_id, first_name, last_name, image_file, drive_file_id, mark, subject_id, subject_name, graded_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
             String(studentId).trim(),
-            firstName || null,
-            lastName || null,
+            realFirstName,
+            realLastName,
             imageFile || null,
             driveFileId || null,
             gradeValue,
@@ -77,8 +90,8 @@ router.post('/', verifyToken, requireAdmin, async (req, res) => {
             sheetId: targetSheetId,
             tabName: sheetTabName,
             studentId,
-            firstName: firstName || '',
-            lastName: lastName || '',
+            firstName: realFirstName,
+            lastName: realLastName,
             imageFile: imageFile || '',
             mark: gradeValue,
             gradedAt: new Date().toLocaleString()
