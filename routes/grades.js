@@ -72,9 +72,10 @@ router.post('/', verifyToken, requireAdmin, async (req, res) => {
 
         // Sync to Google Sheets (non-blocking)
         const targetSheetId = (subject && subject.sheet_id) ? subject.sheet_id : process.env.SHEETS_ID;
+        const sheetTabName = (subject && subject.name) ? subject.name : (process.env.SHEETS_TAB_GRADES || 'Grades');
         appendGradeToSheets({
             sheetId: targetSheetId,
-            tabName: process.env.SHEETS_TAB_GRADES || 'Grades',
+            tabName: sheetTabName,
             studentId,
             firstName: firstName || '',
             lastName: lastName || '',

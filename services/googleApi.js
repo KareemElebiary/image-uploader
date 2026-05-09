@@ -160,8 +160,9 @@ async function deleteDriveFile(fileId) {
 async function appendGradeToSheets({ sheetId, tabName, studentId, firstName, lastName, imageFile, mark, gradedAt }) {
     if (!sheetsClient) return { success: true, simulated: true };
 
+    const fullName = `${firstName || ''} ${lastName || ''}`.trim();
     const values = [[
-        studentId, firstName, lastName, imageFile, mark, gradedAt || new Date().toLocaleString()
+        studentId, fullName, '', imageFile, mark, gradedAt || new Date().toLocaleString()
     ]];
 
     await sheetsClient.spreadsheets.values.append({
