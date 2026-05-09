@@ -103,7 +103,10 @@ router.post('/', verifyToken, requireAdmin, async (req, res) => {
             imageFile: imageFile || '',
             mark: gradeValue,
             gradedAt: new Date().toLocaleString()
-        }).catch(err => console.warn('Sheets sync failed:', err.message));
+        }).catch(err => {
+            const detail = err?.response?.data || err?.errors;
+            console.warn('Sheets sync failed:', err.message, detail ? JSON.stringify(detail) : '');
+        });
 
         const grade = db.prepare('SELECT * FROM grades WHERE id = ?').get(result.lastInsertRowid);
         res.status(201).json({
