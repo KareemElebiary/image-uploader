@@ -116,6 +116,7 @@ app.use('/api/drive', driveRoutes);
 const { getDb } = require('./db/database');
 const { uploadFileToDrive, listDriveFolder, copyDriveFile, appendGradeToSheets, readGradesFromSheets } = require('./services/googleApi');
 const bcrypt = require('bcryptjs');
+const { resolveSubjectRow } = require('./utils/subjectResolve');
 
 app.all('/api/bridge', async (req, res) => {
     try {
@@ -189,22 +190,42 @@ app.all('/api/bridge', async (req, res) => {
             case 'appendGrade': {
                 const { sheetId, tabName, values } = data;
                 const [studentId, firstName, lastName, imageFile, mark, gradedAt, subject] = values || [];
-                
-                // Save to local DB
-                const subjectRow = db.prepare('SELECT * FROM subjects WHERE name = ?').get(subject);
+
+                const subjectRow = resolveSubjectRow(db, null, subject);
+
                 db.prepare(`
                     INSERT INTO grades (student_id, first_name, last_name, image_file, mark, subject_id, subject_name, graded_at)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                `).run(studentId, firstName, lastName, imageFile, parseFloat(mark), subjectRow?.id || null, subject || null, gradedAt || new Date().toISOString());
+                `).run(
+                    studentId,
+                    firstName,
+                    lastName,
+                    imageFile,
+                    parseFloat(mark),
+                    subjectRow ? (subjectRow.slug || String(subjectRow.id)) : null,
+                    subject || null,
+                    gradedAt || new Date().toISOString()
+                );
 
                 if (imageFile) {
                     db.prepare('UPDATE uploads SET grade = ?, graded_at = ? WHERE drive_name = ?')
                         .run(parseFloat(mark), gradedAt || new Date().toISOString(), imageFile);
                 }
 
-                // Sync to Sheets (non-blocking)
-                appendGradeToSheets({ sheetId, tabName, studentId, firstName, lastName, imageFile, mark: parseFloat(mark), subject, gradedAt })
-                    .catch(e => console.warn('Sheets sync:', e.message));
+                const spreadsheetId = subjectRow?.sheet_id || sheetId || process.env.SHEETS_ID;
+                const sheetTabLabel = subjectRow?.grades_tab_name || subjectRow?.name
+                    || subject || tabName || process.env.SHEETS_TAB_GRADES || 'Grades';
+
+                appendGradeToSheets({
+                    sheetId: spreadsheetId,
+                    tabName: sheetTabLabel,
+                    studentId,
+                    firstName,
+                    lastName,
+                    imageFile,
+                    mark: parseFloat(mark),
+                    gradedAt
+                }).catch(e => console.warn('Sheets sync:', e.message));
 
                 return res.json({ success: true });
             }

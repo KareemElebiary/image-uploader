@@ -55,6 +55,20 @@ function initializeDatabase() {
         );
     `);
 
+    try {
+        const subCols = db.prepare('PRAGMA table_info(subjects)').all();
+        const names = subCols.map(c => c.name);
+        if (!names.includes('slug')) {
+            db.exec('ALTER TABLE subjects ADD COLUMN slug TEXT');
+            db.exec('CREATE UNIQUE INDEX IF NOT EXISTS subjects_slug_uq ON subjects(slug) WHERE slug IS NOT NULL AND TRIM(slug) != \'\'');
+        }
+        if (!names.includes('grades_tab_name')) {
+            db.exec('ALTER TABLE subjects ADD COLUMN grades_tab_name TEXT');
+        }
+    } catch (e) {
+        console.warn('Subject column migration skipped:', e.message);
+    }
+
     // ── Uploads Table ────────────────────────────────────────
     db.exec(`
         CREATE TABLE IF NOT EXISTS uploads (

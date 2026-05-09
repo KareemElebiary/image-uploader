@@ -22,6 +22,8 @@ router.get('/', (req, res) => {
         folderId: s.folder_id,
         highId: s.high_folder_id,
         sheetId: s.sheet_id,
+        slug: s.slug ?? null,
+        gradesTabName: s.grades_tab_name ?? null,
         createdAt: s.created_at
     })));
 });
@@ -37,13 +39,15 @@ router.get('/:id', (req, res) => {
         folderId: subject.folder_id,
         highId: subject.high_folder_id,
         sheetId: subject.sheet_id,
+        slug: subject.slug ?? null,
+        gradesTabName: subject.grades_tab_name ?? null,
         createdAt: subject.created_at
     });
 });
 
 /* ── POST /api/subjects (admin only) ────────────────────── */
 router.post('/', verifyToken, requireAdmin, (req, res) => {
-    const { name, folderId, highId, sheetId } = req.body;
+    const { name, folderId, highId, sheetId, slug, gradesTabName } = req.body;
     if (!name || !folderId) {
         return res.status(400).json({ error: 'name and folderId are required.' });
     }
@@ -51,13 +55,15 @@ router.post('/', verifyToken, requireAdmin, (req, res) => {
     const db = getDb();
     try {
         const result = db.prepare(`
-            INSERT INTO subjects (name, folder_id, high_folder_id, sheet_id)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO subjects (name, folder_id, high_folder_id, sheet_id, slug, grades_tab_name)
+            VALUES (?, ?, ?, ?, ?, ?)
         `).run(
             String(name).trim(),
             String(folderId).trim(),
             highId ? String(highId).trim() : null,
-            sheetId ? String(sheetId).trim() : null
+            sheetId ? String(sheetId).trim() : null,
+            slug ? String(slug).trim() : null,
+            gradesTabName ? String(gradesTabName).trim() : null
         );
 
         const created = db.prepare('SELECT * FROM subjects WHERE id = ?').get(result.lastInsertRowid);
@@ -66,7 +72,9 @@ router.post('/', verifyToken, requireAdmin, (req, res) => {
             name: created.name,
             folderId: created.folder_id,
             highId: created.high_folder_id,
-            sheetId: created.sheet_id
+            sheetId: created.sheet_id,
+            slug: created.slug ?? null,
+            gradesTabName: created.grades_tab_name ?? null
         });
     } catch (err) {
         if (err.message.includes('UNIQUE')) {
@@ -78,24 +86,33 @@ router.post('/', verifyToken, requireAdmin, (req, res) => {
 
 /* ── PUT /api/subjects/:id (admin only) ─────────────────── */
 router.put('/:id', verifyToken, requireAdmin, (req, res) => {
-    const { name, folderId, highId, sheetId } = req.body;
+    const { name, folderId, highId, sheetId, slug, gradesTabName } = req.body;
     const db = getDb();
 
-    const subject = db.prepare('SELECT id FROM subjects WHERE id = ?').get(req.params.id);
+    const subject = db.prepare('SELECT * FROM subjects WHERE id = ?').get(req.params.id);
     if (!subject) return res.status(404).json({ error: 'Subject not found' });
+
+    const nextSlug = slug !== undefined ? (slug ? String(slug).trim() : null) : subject.slug;
+    const nextGt = gradesTabName !== undefined
+        ? (gradesTabName ? String(gradesTabName).trim() : null)
+        : subject.grades_tab_name;
 
     db.prepare(`
         UPDATE subjects
         SET name = COALESCE(?, name),
             folder_id = COALESCE(?, folder_id),
             high_folder_id = COALESCE(?, high_folder_id),
-            sheet_id = COALESCE(?, sheet_id)
+            sheet_id = COALESCE(?, sheet_id),
+            slug = ?,
+            grades_tab_name = ?
         WHERE id = ?
     `).run(
         name ? String(name).trim() : null,
         folderId ? String(folderId).trim() : null,
-        highId !== undefined ? (highId ? String(highId).trim() : null) : undefined,
-        sheetId !== undefined ? (sheetId ? String(sheetId).trim() : null) : undefined,
+        highId !== undefined ? (highId ? String(highId).trim() : null) : null,
+        sheetId !== undefined ? (sheetId ? String(sheetId).trim() : null) : null,
+        nextSlug,
+        nextGt,
         req.params.id
     );
 
@@ -105,7 +122,9 @@ router.put('/:id', verifyToken, requireAdmin, (req, res) => {
         name: updated.name,
         folderId: updated.folder_id,
         highId: updated.high_folder_id,
-        sheetId: updated.sheet_id
+        sheetId: updated.sheet_id,
+        slug: updated.slug ?? null,
+        gradesTabName: updated.grades_tab_name ?? null
     });
 });
 

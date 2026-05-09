@@ -11,6 +11,7 @@ const express = require('express');
 const { getDb } = require('../db/database');
 const { verifyToken, requireAdmin } = require('./auth');
 const { appendGradeToSheets, copyDriveFile } = require('../services/googleApi');
+const { resolveSubjectRow } = require('../utils/subjectResolve');
 
 const router = express.Router();
 const HIGH_SCORE = parseInt(process.env.HIGH_SCORE_THRESHOLD || '80');
@@ -31,15 +32,19 @@ router.post('/', verifyToken, requireAdmin, async (req, res) => {
     try {
         const db = getDb();
 
-        // Look up subject if provided
         let subject = null;
-        let resolvedSubjectId = subjectId;
-        let resolvedSubjectName = subjectName;
+        let resolvedSubjectId = subjectId != null && subjectId !== '' ? String(subjectId).trim() : null;
+        let resolvedSubjectName = subjectName != null && String(subjectName).trim() !== ''
+            ? String(subjectName).trim()
+            : null;
 
-        if (subjectId) {
-            subject = db.prepare('SELECT * FROM subjects WHERE id = ?').get(subjectId);
-            if (subject) {
-                resolvedSubjectName = subject.name;
+        subject = resolveSubjectRow(db, subjectId, subjectName);
+        if (subject) {
+            resolvedSubjectName = subject.name;
+            if (!resolvedSubjectId) {
+                resolvedSubjectId = subject.slug && String(subject.slug).trim()
+                    ? String(subject.slug).trim()
+                    : String(subject.id);
             }
         }
 
@@ -69,8 +74,8 @@ router.post('/', verifyToken, requireAdmin, async (req, res) => {
             imageFile || null,
             driveFileId || null,
             gradeValue,
-            resolvedSubjectId || null,
-            resolvedSubjectName || null,
+            resolvedSubjectId ?? null,
+            resolvedSubjectName ?? null,
             gradedAt
         );
 
@@ -83,12 +88,15 @@ router.post('/', verifyToken, requireAdmin, async (req, res) => {
 
         // Copying to High Achievers folder is handled by the frontend via Apps Script
 
-        // Sync to Google Sheets (non-blocking)
-        const targetSheetId = (subject && subject.sheet_id) ? subject.sheet_id : process.env.SHEETS_ID;
-        const sheetTabName = (subject && subject.name) ? subject.name : (process.env.SHEETS_TAB_GRADES || 'Grades');
+        // Sync to Google Sheets — one tab per subject in the workbook (optional separate spreadsheet via subject.sheet_id)
+        const spreadsheetId = subject?.sheet_id || process.env.SHEETS_ID;
+        const sheetTabLabel = subject?.grades_tab_name || subject?.name
+            || resolvedSubjectName || subjectName
+            || (process.env.SHEETS_TAB_GRADES || 'Grades');
+
         appendGradeToSheets({
-            sheetId: targetSheetId,
-            tabName: sheetTabName,
+            sheetId: spreadsheetId,
+            tabName: sheetTabLabel,
             studentId,
             firstName: realFirstName,
             lastName: realLastName,

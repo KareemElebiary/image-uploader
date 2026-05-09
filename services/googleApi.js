@@ -156,18 +156,88 @@ async function deleteDriveFile(fileId) {
     return { success: true };
 }
 
+const SHEET_HEADERS = [['Student ID', 'First Name', 'Last Name', 'Image File', 'Mark %', 'Graded At']];
+
+function sanitizeSheetTabTitle(raw) {
+    let s = String(raw ?? 'Grades')
+        .replace(/[\\/:?*\[\]\u0000-\u001f]/g, '-')
+        .replace(/^'+|'+$/g, '')
+        .trim()
+        .slice(0, 99);
+    return s || 'Grades';
+}
+
+/** Ensure worksheet exists; seed header row on brand-new tabs only */
+async function ensureGradeSheetTabReady(spreadsheetId, desiredTitle) {
+    if (!sheetsClient || !spreadsheetId) return;
+
+    const title = sanitizeSheetTabTitle(desiredTitle);
+    const meta = await sheetsClient.spreadsheets.get({
+        spreadsheetId,
+        fields: 'sheets.properties(sheetId,title)'
+    });
+
+    const sheets = meta.data.sheets || [];
+    const exists = sheets.some(s => s.properties && s.properties.title === title);
+
+    if (!exists) {
+        await sheetsClient.spreadsheets.batchUpdate({
+            spreadsheetId,
+            requestBody: {
+                requests: [{ addSheet: { properties: { title } } }]
+            }
+        });
+        await sheetsClient.spreadsheets.values.update({
+            spreadsheetId,
+            range: `'${escapeSheetTitle(title)}'!A1:F1`,
+            valueInputOption: 'USER_ENTERED',
+            requestBody: { values: SHEET_HEADERS }
+        });
+        return;
+    }
+
+    const head = await sheetsClient.spreadsheets.values.get({
+        spreadsheetId,
+        range: `'${escapeSheetTitle(title)}'!A1:F1`
+    }).catch(() => ({ data: {} }));
+
+    const row = head.data.values && head.data.values[0];
+    if (!row || row.length === 0 || !(row[0] && String(row[0]).trim())) {
+        await sheetsClient.spreadsheets.values.update({
+            spreadsheetId,
+            range: `'${escapeSheetTitle(title)}'!A1:F1`,
+            valueInputOption: 'USER_ENTERED',
+            requestBody: { values: SHEET_HEADERS }
+        });
+    }
+}
+
+/** A1-safe quoted sheet tab name */
+function escapeSheetTitle(title) {
+    return `'${String(title).replace(/'/g, "''")}'`;
+}
+
 /* ── Append a grade row to Google Sheets ────────────────── */
 async function appendGradeToSheets({ sheetId, tabName, studentId, firstName, lastName, imageFile, mark, gradedAt }) {
     if (!sheetsClient) return { success: true, simulated: true };
+
+    const spreadsheetId = sheetId || process.env.SHEETS_ID;
+    const rawTab = tabName || process.env.SHEETS_TAB_GRADES || 'Grades';
+
+    await ensureGradeSheetTabReady(spreadsheetId, rawTab);
+
+    const safeTab = sanitizeSheetTabTitle(rawTab);
+    const range = `'${escapeSheetTitle(safeTab)}'!A:F`;
 
     const values = [[
         studentId, firstName, lastName, imageFile, mark, gradedAt || new Date().toLocaleString()
     ]];
 
     await sheetsClient.spreadsheets.values.append({
-        spreadsheetId: sheetId || process.env.SHEETS_ID,
-        range: `${tabName || 'Grades'}!A:G`,
+        spreadsheetId,
+        range,
         valueInputOption: 'USER_ENTERED',
+        insertDataOption: 'INSERT_ROWS',
         requestBody: { values },
     });
 
@@ -178,9 +248,10 @@ async function appendGradeToSheets({ sheetId, tabName, studentId, firstName, las
 async function readGradesFromSheets(sheetId, tabName) {
     if (!sheetsClient) return [];
 
+    const t = sanitizeSheetTabTitle(tabName || 'Grades');
     const res = await sheetsClient.spreadsheets.values.get({
         spreadsheetId: sheetId || process.env.SHEETS_ID,
-        range: `${tabName || 'Grades'}!A:G`,
+        range: `${escapeSheetTitle(t)}!A:F`,
     });
 
     return res.data.values || [];
@@ -214,5 +285,6 @@ module.exports = {
     appendGradeToSheets,
     readGradesFromSheets,
     syncUsersToSheets,
+    sanitizeSheetTabTitle,
     isGoogleReady: () => googleReady,
 };
